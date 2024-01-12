@@ -65,7 +65,7 @@ sourceCpp('~/FunBootBand-Rcpp/FunBootBand_cpp.cpp')
 
 # Dummy Rcpp function to check if implementation works
 hello_world()
-
+ 
 band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
 
   # Argument checking
