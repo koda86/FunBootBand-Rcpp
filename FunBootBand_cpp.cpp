@@ -6,19 +6,26 @@ void hello_world () {
   std::cout << "Hello, world!";
 }
 
-/*
 // [[Rcpp::export]]
 NumericMatrix constructFourierSeries(int n_time, int k_coef) {
   NumericMatrix fourier_s(n_time, k_coef * 2 + 1);
-  fourier_s(_, 0) = 1; // First column as ones
+  
+  // Fill the first column with ones
+  for (int i = 0; i < n_time; ++i) {
+    fourier_s(i, 0) = 1;
+  }
   
   for (int k = 1; k <= k_coef * 2; k += 2) {
-    fourier_s(_, k) = cos(2 * M_PI * (k / 2) * seq_len(n_time) / (n_time - 1));
-    fourier_s(_, k + 1) = sin(2 * M_PI * (k / 2) * seq_len(n_time) / (n_time - 1));
+    for (int t = 0; t < n_time; ++t) {
+      double normalized_time = static_cast<double>(t) / (n_time - 1);
+      fourier_s(t, k) = cos(2 * M_PI * (k / 2) * normalized_time);
+      fourier_s(t, k + 1) = sin(2 * M_PI * (k / 2) * normalized_time);
+    }
   }
   return fourier_s;
 }
 
+/*
 // [[Rcpp::export]]
 NumericMatrix pseudoInverse(const NumericMatrix& A) {
   SVD svd(A);
@@ -34,4 +41,4 @@ NumericMatrix pseudoInverse(const NumericMatrix& A) {
   }
   return V * S_inv * transpose(U);
 }
-*/
+ */

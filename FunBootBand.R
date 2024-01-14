@@ -64,7 +64,7 @@ library(Rcpp)
 sourceCpp('~/FunBootBand-Rcpp/FunBootBand_cpp.cpp')
 
 # Dummy Rcpp function to check if implementation works
-hello_world()
+# hello_world()
  
 band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
 
@@ -113,14 +113,17 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
   fourier.std     <- array(data = 0, dim = c(n.time, 1))
 
   # Construct Fourier series
-  # General: f(t) = mu + sum(alpha cos(2pi*k*t/T) + beta sin(2pi*k*t/T))
-  fourier.s = rep(1, times = n.time)
-  for (k in seq(1, k.coef*2, 2)) {
-    fourier.s <- cbind(fourier.s, cos(2*pi*(k/2)*time / (n.time-1)))
-    fourier.s <- cbind(fourier.s, sin(2*pi*(k/2)*time / (n.time-1)))
-    # '-1' to match the equations in Lenhoff Appendix A ('T')
-  }
-  # fouriers.s <- constructFourierSeries(100, 50) # Use Cpp function
+  # (New) Rcpp code
+  fouriers.s_new <- constructFourierSeries(n.time, k.coef) # Use Cpp function
+  
+  # # Original R code
+  # # General: f(t) = mu + sum(alpha cos(2pi*k*t/T) + beta sin(2pi*k*t/T))
+  # fourier.s = rep(1, times = n.time)
+  # for (k in seq(1, k.coef*2, 2)) {
+  #   fourier.s <- cbind(fourier.s, cos(2*pi*(k/2)*time / (n.time-1)))
+  #   fourier.s <- cbind(fourier.s, sin(2*pi*(k/2)*time / (n.time-1)))
+  #   # '-1' to match the equations in Lenhoff Appendix A ('T')
+  # }
   
   # Helper function to calculate the pseudoinverse (Moore-Penrose)
   pseudo_inverse <- function(A, tol = .Machine$double.eps^(2/3)) {
@@ -147,7 +150,17 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
     }
     return(inverse)
   }
-
+  
+  # # (New) Rcpp code
+  # for (i in 1:n.curves) {
+  #   # Replace the R code for pseudo-inverse with the Rcpp function
+  #   # Least squares Regression
+  #   fourier.koeffi[, i] <- pseudoInverse(t(fourier.s) %*% fourier.s) %*% t(fourier.s) %*% data[, i]
+  #   # Fourier curve
+  #   fourier.real[, i] <- fourier.s %*% fourier.koeffi[, i]
+  # }
+  
+  # Original R code
   for (i in 1:n.curves) {
     # Least squares Regression
     fourier.koeffi[, i] = pseudo_inverse(t(fourier.s) %*% fourier.s) %*%
