@@ -8,11 +8,11 @@ void hello_world () {
 
 // [[Rcpp::export]]
 List getDimensions(DataFrame data) {
-  int nColumns = data.ncol();
-  int nRows = data.nrow();
+  int n_curves = data.ncol();
+  int n_time = data.nrow();
   
-  return List::create(Named("nRows") = nRows,
-                      Named("nColumns") = nColumns);
+  return List::create(Named("n_time") = n_time,
+                      Named("n_curves") = n_curves);
 }
 
 // [[Rcpp::export]]
