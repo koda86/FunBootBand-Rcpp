@@ -7,6 +7,15 @@ void hello_world () {
 }
 
 // [[Rcpp::export]]
+List getDimensions(DataFrame data) {
+  int nColumns = data.ncol();
+  int nRows = data.nrow();
+  
+  return List::create(Named("nRows") = nRows,
+                      Named("nColumns") = nColumns);
+}
+
+// [[Rcpp::export]]
 NumericMatrix constructFourierSeries(int n_time, int k_coef) {
   NumericMatrix fourier_s(n_time, k_coef * 2 + 1);
   
