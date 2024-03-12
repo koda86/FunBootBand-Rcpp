@@ -34,8 +34,6 @@
 #' smoothness of the curve approximation.
 #' @param B Number of bootstrap iterations (e.g., B = 1000). Default is 400.
 #'
-#' @importFrom stats quantile
-#'
 #' @export
 #'
 #' @return A data frame object that contains upper and lower band boundaries,
@@ -51,21 +49,6 @@
 #' lines(band.limits[2, ]) # mean curve
 #' lines(band.limits[3, ]) # lower band limit
 
-# TODO:
-# - Preprint des JoB papers auf der Github Seite adden
-# - test coverage (covr) ... chapter 13 https://r-pkgs.org/testing-basics.html
-# - Checken ob die Funktion Fehler auswirft wenn Kurven unterschiedlich lang sind
-# - Peer review, e.g. https://ropensci.org/software-review/
-# - Vignette schreiben
-
-library(Rcpp)
-
-# Source the C++ functions
-sourceCpp('~/FunBootBand-Rcpp/FunBootBand_cpp.cpp')
-
-# Dummy Rcpp function to check if implementation works
-# hello_world()
- 
 band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
 
   # Argument checking
@@ -90,16 +73,75 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
     stop("Function stopped due to NA's in the input data.")
   }
 
+  if (is.data.frame(data) == FALSE) {stop("Input data is not a data frame.")}
+
+  # Check if all data elements are numeric
+  if (!all(sapply(data, is.numeric))) {
+    stop("Non-numeric data found in input.")
+  }
+
   n.curves  <- dim(data)[2]
   n.time <- dim(data)[1]
   time <- seq(0, (n.time - 1))
 
-  if (iid == FALSE) {
-    if (is.data.frame(data) == FALSE) {stop("Input data is not a data frame.")}
-    n.cluster <- length(unique(colnames(data)))
-    curves.per.cluster <- n.curves / n.cluster
-    if (n.cluster < 2 | n.cluster == ncol(data)) {stop("The header does not\n
-        indicate a nested structure even though 'iid' is set to 'FALSE'.")}
+  if (iid != TRUE) {
+    # Check colnames to make sure the nested structure is correctly identified
+    if (colnames(data)[1] != colnames(data)[2]) {
+      # This is necessary to make sure curves are not detected as iid
+      new_colnames <- substr(colnames(data), 1, 1)
+      colnames(data) <- new_colnames
+    }
+
+    if (colnames(data)[1] != colnames(data)[2]) {
+      stop("Header does not indicate a nested structure even though 'iid' is set to 'FALSE'.")
+      # \n Make sure curves within the same cluster all have the exact same column label.")
+    }
+
+    # --------------------------------------------------------------------------
+    # This implements a more robust approach that allows the detection of the
+    # number and size (aka number of curves per cluster) of cluster in the case
+    # where different clusters contain a different amount of curves per cluster.
+    # Function to determine the base name (or cluster identifier) of a column
+    # --------------------------------------------------------------------------
+    get_base_name <- function(name) {
+      # Split the name at any non-alphanumeric character (e.g., '.', '-')
+      parts <- strsplit(name, "[^[:alnum:]]")[[1]]
+      return(parts[1])
+    }
+
+    clusters <- list()
+    for (name in colnames(data)) {
+      base_name <- get_base_name(name)
+      # Check if the base name already exists in the clusters
+      if (!base_name %in% names(clusters)) {
+        # If not, create a new entry in clusters with this base name
+        clusters[[base_name]] <- 0
+      }
+      clusters[[base_name]] <- clusters[[base_name]] + 1
+    }
+
+    cluster_boundaries <- list()
+    start_idx <- 1
+    for (cluster_id in names(clusters)) {
+      end_idx <- start_idx + clusters[[cluster_id]] - 1
+      cluster_boundaries[[cluster_id]] <- c(start = start_idx, end = end_idx)
+      start_idx <- end_idx + 1
+    }
+
+    # Function to get the indices for a single cluster
+    get_cluster_indices <- function(cluster_id, cluster_boundaries) {
+      if (cluster_id %in% names(cluster_boundaries)) {
+        boundaries <- cluster_boundaries[[cluster_id]]
+        return(seq(from = boundaries["start"], to = boundaries["end"]))
+      } else {
+        stop("Cluster ID not found.")
+      }
+    }
+
+    n.cluster <- length(clusters)
+    if (n.cluster < 2 | n.cluster == ncol(data)) {
+      stop("Header does not indicate a nested structure even though 'iid' is set to 'FALSE'.")
+      }
   }
 
   # Approximate curves using Fourier functions ---------------------------------
@@ -113,18 +155,14 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
   fourier.std     <- array(data = 0, dim = c(n.time, 1))
 
   # Construct Fourier series
-  # (New) Rcpp code
-  fouriers.s_new <- constructFourierSeries(n.time, k.coef) # Use Cpp function
-  
-  # # Original R code
-  # # General: f(t) = mu + sum(alpha cos(2pi*k*t/T) + beta sin(2pi*k*t/T))
-  # fourier.s = rep(1, times = n.time)
-  # for (k in seq(1, k.coef*2, 2)) {
-  #   fourier.s <- cbind(fourier.s, cos(2*pi*(k/2)*time / (n.time-1)))
-  #   fourier.s <- cbind(fourier.s, sin(2*pi*(k/2)*time / (n.time-1)))
-  #   # '-1' to match the equations in Lenhoff Appendix A ('T')
-  # }
-  
+  # General: f(t) = mu + sum(alpha cos(2pi*k*t/T) + beta sin(2pi*k*t/T))
+  fourier.s = rep(1, times = n.time)
+  for (k in seq(1, k.coef*2, 2)) {
+    fourier.s <- cbind(fourier.s, cos(2*pi*(k/2)*time / (n.time-1)))
+    fourier.s <- cbind(fourier.s, sin(2*pi*(k/2)*time / (n.time-1)))
+    # '-1' to match the equations in Lenhoff Appendix A ('T')
+  }
+
   # Helper function to calculate the pseudoinverse (Moore-Penrose)
   pseudo_inverse <- function(A, tol = .Machine$double.eps^(2/3)) {
     stopifnot(is.numeric(A) || is.complex(A), is.matrix(A))
@@ -150,17 +188,7 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
     }
     return(inverse)
   }
-  
-  # # (New) Rcpp code
-  # for (i in 1:n.curves) {
-  #   # Replace the R code for pseudo-inverse with the Rcpp function
-  #   # Least squares Regression
-  #   fourier.koeffi[, i] <- pseudoInverse(t(fourier.s) %*% fourier.s) %*% t(fourier.s) %*% data[, i]
-  #   # Fourier curve
-  #   fourier.real[, i] <- fourier.s %*% fourier.koeffi[, i]
-  # }
-  
-  # Original R code
+
   for (i in 1:n.curves) {
     # Least squares Regression
     fourier.koeffi[, i] = pseudo_inverse(t(fourier.s) %*% fourier.s) %*%
@@ -198,35 +226,49 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
   bootstrap.zz            <- array(data = 0, dim = c(n.curves, B))
   bootstrap.pseudo_koeffi <- array(data = 0, dim = c(k.coef*2 + 1, n.curves, B))
   bootstrap.real          <- array(data = 0, dim = c(n.time, n.curves, B))
-  bootstrap.std1          <- array(data = 0, dim = c(k.coef*2 + 1, k.coef*2 + 1,
-                                                     n.curves))
-  bootstrap.cov           <- array(data = 0, dim = c(k.coef*2 + 1, k.coef*2 + 1,
-                                                     B))
+  bootstrap.std1          <- array(data = 0, dim = c(k.coef*2 + 1, k.coef*2 + 1, n.curves))
+  bootstrap.cov           <- array(data = 0, dim = c(k.coef*2 + 1, k.coef*2 + 1, B))
   bootstrap.std_all       <- array(data = 0, dim = c(n.time, n.time, B))
   bootstrap.std           <- array(data = 0, dim = c(n.time, B))
 
+  # Run two-stage (cluster) bootstrap ------------------------------------------
+  #
+  # Quote from the Journal of Biomechanics paper (Koska et al., 2023)
+  # [...] we implemented a second, modified version of the BOOT method, in
+  # which multiple curves per subject are accounted for (BOOTrep).
+  # Therefore, BOOTrep includes the two-stage bootstrap process described
+  # in Davison and Hinkley (1997), in which subjects (including all of
+  # their curves) are sampled with replacement in the first stage, and one
+  # curve per subject is drawn without replacement in the second
+  # stage.
+
   for (i in 1:B) {
-    if (iid == FALSE) { # Run two-stage (cluster) bootstrap
-      for (k in 1:curves.per.cluster) {
-        # STAGE 1: Sample curve clusters with replacement
+    if (iid == FALSE) {
+      for (k in 1:n.curves) {
+        # STAGE 1: Sample curve clusters (including all curves) with replacement
         stage.1.idx <- sample(1:n.cluster, size = n.cluster, replace = TRUE)
-        # STAGE 2: Sample within stage clusters without replacement
-        curves <- c()
+        curves.stage.2 <- c()
         for (curve.idx in stage.1.idx) {
-          curve.numbers.stage.1 <- seq(from = curve.idx*curves.per.cluster -
-                                          curves.per.cluster + 1,
-                                        to = curve.idx*curves.per.cluster)
-          tmp <- sample(curve.numbers.stage.1, size = 1, replace = FALSE)
-          while (tmp %in% curves) { # Assure drawing without replacement
-            tmp <- sample(curve.numbers.stage.1, size = 1)
-          }
-          curves <- c(curves, tmp)
+          # Here, the indices of a single cluster (drawn with replacement) are selected
+          curve.idx.clustername <- names(cluster_boundaries)[curve.idx]
+          curve.numbers.stage.1 <- get_cluster_indices(curve.idx.clustername, cluster_boundaries)
+
+          # STAGE 2: Sample within stage clusters without replacement
+          sample.curve.index <- sample(curve.numbers.stage.1, size = 1, replace = FALSE)
+          # while (sample.curve.index %in% curves.stage.2) { # Assure drawing without replacement
+          #   sample.curve.index <- sample(curve.numbers.stage.1, size = 1)
+          # }
+          curves.stage.2 <- c(curves.stage.2, sample.curve.index)
         }
-        bootstrap.zz[k, i] = curves[k]
-        bootstrap.pseudo_koeffi[, k, i] = fourier.koeffi[, bootstrap.zz[k, i]]
-        bootstrap.real[, k, i] = fourier.s %*% bootstrap.pseudo_koeffi[, k, i]
-    }
-    } else { # Run 'ordinary' (naive) bootstrap
+
+        for (clust.idx in 1:n.cluster) {
+          bootstrap.zz[k, i] = curves.stage.2[clust.idx] # Old version: curves[k] # Hier liegt der Hase im Pfeffer! Ab k=12 wirft es NA's
+          bootstrap.pseudo_koeffi[, k, i] = fourier.koeffi[, bootstrap.zz[k, i]]
+          bootstrap.real[, k, i] = fourier.s %*% bootstrap.pseudo_koeffi[, k, i]
+        }
+      }
+    # If iid == TRUE: Run ordinary (naive) bootstrap
+    } else {
       for (k in 1:n.curves) {
         bootstrap.zz[k, i] = sample(n.curves, size=1)
         bootstrap.pseudo_koeffi[, k, i] = fourier.koeffi[, bootstrap.zz[k, i]]
@@ -263,20 +305,18 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
     cp.data_i <- array(data = 0, dim = c(n.curves, B))
 
     cp.mean <- 0
-    cp.bound <- 0 # cp.begin
+    cp.bound <- 0
     while (cp.mean < (1-alpha)) {
       for (i in 1:B) {
         for (k in 1:n.curves) {
           # Lenhoff et al., Appendix A, Eq. (0.6)
-          cp.data[k, i] <- max(abs(fourier.real[, k] - bootstrap.real_mw[, i]) /
-                                 bootstrap.std[, i])
+          cp.data[k, i] <- max(abs(fourier.real[, k] - bootstrap.real_mw[, i]) / bootstrap.std[, i])
           cp.data_i[k, i] <- cp.data[k, i] < cp.bound
         }
       }
       cp.mean <- mean(cp.data_i)
       cp.bound <- cp.bound + 0.05
     }
-    cp_out <- cp.bound
 
     band.boot <- rbind(band.mean + cp.bound * band.sd,
                        band.mean,
@@ -305,3 +345,118 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
   return(band.boot)
 }
 
+
+
+################################################################################
+# The functions quantile() and format_perc() (the latter is used in quantile())
+# are included at the end of this script. Otherwise, they would have to be im-
+# ported from the 'stats' package (via: @importFrom stats quantile)
+################################################################################
+
+quantile <- function (x, probs = seq(0, 1, 0.25), na.rm = FALSE, names = TRUE,
+                      type = 7, digits = 7, ...)
+{
+  if (is.factor(x)) {
+    if (is.ordered(x)) {
+      if (!any(type == c(1L, 3L)))
+        stop("'type' must be 1 or 3 for ordered factors")
+    }
+    else stop("(unordered) factors are not allowed")
+    lx <- levels(x)
+    x <- as.integer(x)
+  }
+  else {
+    if (is.null(x))
+      x <- numeric()
+    lx <- NULL
+  }
+  if (na.rm)
+    x <- x[!is.na(x)]
+  else if (anyNA(x))
+    stop("missing values and NaN's not allowed if 'na.rm' is FALSE")
+  eps <- 100 * .Machine$double.eps
+  if (any((p.ok <- !is.na(probs)) & (probs < -eps | probs >
+                                     1 + eps)))
+    stop("'probs' outside [0,1]")
+  n <- length(x)
+  probs <- pmax(0, pmin(1, probs))
+  np <- length(probs)
+  {
+    if (type == 7) {
+      index <- 1 + max(n - 1, 0) * probs
+      lo <- floor(index)
+      hi <- ceiling(index)
+      x <- sort(x, partial = if (n == 0)
+        numeric()
+        else unique(c(lo, hi)[p.ok]))
+      qs <- x[lo]
+      i <- which(!p.ok | (index > lo & x[hi] != qs))
+      h <- (index - lo)[i]
+      qs[i] <- (1 - h) * qs[i] + h * x[hi[i]]
+    }
+    else {
+      if (type <= 3) {
+        nppm <- if (type == 3)
+          n * probs - 0.5
+        else n * probs
+        j <- floor(nppm)
+        h <- switch(type, !p.ok | (nppm > j), ((nppm >
+                                                  j) + 1)/2, !p.ok | (nppm != j) | ((j%%2L) ==
+                                                                                      1L))
+      }
+      else {
+        switch(type - 3, {
+          a <- 0
+          b <- 1
+        }, a <- b <- 0.5, a <- b <- 0, a <- b <- 1, a <- b <- 1/3,
+        a <- b <- 3/8)
+        fuzz <- 4 * .Machine$double.eps
+        nppm <- a + probs * (n + 1 - a - b)
+        j <- floor(nppm + fuzz)
+        h <- nppm - j
+        if (any(sml <- abs(h) < fuzz, na.rm = TRUE))
+          h[sml] <- 0
+      }
+      x <- sort(x, partial = if (n == 0)
+        numeric()
+        else unique(c(1, j[p.ok & j > 0L & j <= n], (j +
+                                                       1)[p.ok & j > 0L & j < n], n)))
+      x <- c(x[1L], x[1L], x, x[n], x[n])
+      qs <- x[j + 2L]
+      qs[!is.na(h) & h == 1] <- x[j + 3L][!is.na(h) & h ==
+                                            1]
+      other <- (0 < h) & (h < 1) & (x[j + 2L] != x[j +
+                                                     3L])
+      other[is.na(other)] <- TRUE
+      if (any(other))
+        qs[other] <- ((1 - h) * x[j + 2L] + h * x[j +
+                                                    3L])[other]
+    }
+  }
+  qs[!p.ok] <- probs[!p.ok]
+  if (is.character(lx))
+    qs <- factor(qs, levels = seq_along(lx), labels = lx,
+                 ordered = TRUE)
+  if (names && np > 0L) {
+    stopifnot(is.numeric(digits), digits >= 1)
+    names(qs) <- format_perc(probs, digits = digits)
+  }
+  qs
+}
+
+
+
+format_perc <- function (x, digits = max(2L, getOption("digits")), probability = TRUE,
+                         use.fC = length(x) < 100, ...)
+{
+  if (length(x)) {
+    if (probability)
+      x <- 100 * x
+    ans <- paste0(if (use.fC)
+      formatC(x, format = "fg", width = 1, digits = digits)
+      else format(x, trim = TRUE, digits = digits, ...), "%")
+    ans[is.na(x)] <- ""
+    ans
+  }
+  else character(0)
+}
