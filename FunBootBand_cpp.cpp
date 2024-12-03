@@ -1,22 +1,56 @@
 // #include <Rcpp.h>
 #include <RcppArmadillo.h> // Armadillo: C++ library for linear algebra and scientific computing
+#include <iostream> // For std::cout and std::endl
+#include <string>   // For std::string
+#include <regex>    // For std::regex
 
 using namespace Rcpp;
 
+/*
 // [[Rcpp::export]]
 void hello_world () {
   std::cout << "Hello, world!";
 }
+*/
+ 
+ // [[Rcpp::export]]
+ List getDimensions(DataFrame data) {
+   int n_curves = data.ncol();
+   int n_time = data.nrow();
+   
+   return List::create(Named("n_time") = n_time,
+                       Named("n_curves") = n_curves);
+ }
+ 
+// --------------------------------------------------------------------------
+// This implements a more robust approach that allows the detection of the
+// number and size (i.e., the number of curves per cluster) in cases where 
+// different clusters contain a varying number of curves per cluster.
+//
+// Function to determine the base name (or cluster identifier) of a column
+// --------------------------------------------------------------------------
 
-// [[Rcpp::export]]
-List getDimensions(DataFrame data) {
-  int n_curves = data.ncol();
-  int n_time = data.nrow();
-  
-  return List::create(Named("n_time") = n_time,
-                      Named("n_curves") = n_curves);
+// Helper function to split a string using a regular expression
+std::vector<std::string> split(const std::string& str, const std::string& regex_pattern) {
+  std::regex regex_delim(regex_pattern);
+  std::sregex_token_iterator iter(str.begin(), str.end(), regex_delim, -1);
+  std::sregex_token_iterator end;
+  return {iter, end};
 }
 
+// Function to get the base name
+// [[Rcpp::export]]
+std::string get_base_name(const std::string& name) {
+  // Split the string at any non-alphanumeric character
+  std::vector<std::string> parts = split(name, R"([^a-zA-Z0-9])");
+  // Return the first part if it exists
+  return !parts.empty() ? parts[0] : "";
+}
+
+
+
+// Construct Fourier series
+// General: f(t) = mu + sum(alpha cos(2pi*k*t/T) + beta sin(2pi*k*t/T))
 // [[Rcpp::export]]
 NumericMatrix constructFourierSeries(int n_time, int k_coef) {
   NumericMatrix fourier_s(n_time, k_coef * 2 + 1);
@@ -36,9 +70,8 @@ NumericMatrix constructFourierSeries(int n_time, int k_coef) {
   return fourier_s;
 }
 
-// [[Rcpp::depends(RcppArmadillo)]]
-
 // Helper function to calculate the pseudoinverse (Moore-Penrose)
+// [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::export]]
 arma::mat pseudo_inverse(const arma::mat& A, Rcpp::Nullable<double> tol = R_NilValue) {
   // Set default value for tol if not provided
@@ -63,21 +96,3 @@ arma::mat pseudo_inverse(const arma::mat& A, Rcpp::Nullable<double> tol = R_NilV
     return V * arma::diagmat(S_inv) * U.t();
   }
 }
-
-/*
-// [[Rcpp::export]]
-NumericMatrix pseudoInverse(const NumericMatrix& A) {
-  SVD svd(A);
-  NumericMatrix U = svd.u;
-  NumericVector S = svd.d;
-  NumericMatrix V = svd.v;
-  
-  // Compute the pseudo-inverse
-  double tolerance = std::max(A.nrow(), A.ncol()) * S[0] * std::numeric_limits<double>::epsilon();
-  NumericMatrix S_inv = diag(1 / S);
-  for (int i = 0; i < S.length(); ++i) {
-    if (S[i] < tolerance) S_inv(i, i) = 0;
-  }
-  return V * S_inv * transpose(U);
-}
- */

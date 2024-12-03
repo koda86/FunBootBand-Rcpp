@@ -12,3 +12,6 @@ getDimensions(data)
 # Example usage of the Moore-Penrose pseudoinverse function
 A <- matrix(c(1, 2, 3, 4), nrow = 2)
 pseudo_inverse(A)
+
+# Split string function
+get_base_name("cluster.1.curve") 
