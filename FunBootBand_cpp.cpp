@@ -224,3 +224,24 @@ arma::mat pseudo_inverse(const arma::mat& A, Rcpp::Nullable<double> tol = R_NilV
     return V * arma::diagmat(S_inv) * U.t();
   }
 }
+
+// [[Rcpp::export]]
+void calculate_fourier_coefficients_and_curves(
+    arma::mat& fourier_koeffi,   // Matrix to store Fourier coefficients
+    arma::mat& fourier_real,     // Matrix to store Fourier real curves
+    const arma::mat& fourier_s,  // Fourier basis matrix
+    const arma::mat& data        // Data matrix
+) {
+  int n_curves = data.n_cols;
+  
+  for (int i = 0; i < n_curves; i++) {
+    // Least squares regression to calculate Fourier coefficients
+    arma::mat pseudo_inv = arma::pinv(fourier_s.t() * fourier_s); // Pseudo-inverse
+    fourier_koeffi.col(i) = pseudo_inv * fourier_s.t() * data.col(i);
+    
+    // Calculate Fourier curve
+    fourier_real.col(i) = fourier_s * fourier_koeffi.col(i);
+  }
+}
+
+
