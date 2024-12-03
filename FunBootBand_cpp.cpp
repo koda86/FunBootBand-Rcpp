@@ -1,4 +1,6 @@
-#include <Rcpp.h>
+// #include <Rcpp.h>
+#include <RcppArmadillo.h> // Armadillo: C++ library for linear algebra and scientific computing
+
 using namespace Rcpp;
 
 // [[Rcpp::export]]
@@ -32,6 +34,34 @@ NumericMatrix constructFourierSeries(int n_time, int k_coef) {
     }
   }
   return fourier_s;
+}
+
+// [[Rcpp::depends(RcppArmadillo)]]
+
+// Helper function to calculate the pseudoinverse (Moore-Penrose)
+// [[Rcpp::export]]
+arma::mat pseudo_inverse(const arma::mat& A, Rcpp::Nullable<double> tol = R_NilValue) {
+  // Set default value for tol if not provided
+  double tolerance = tol.isNotNull() ? Rcpp::as<double>(tol) : std::pow(std::numeric_limits<double>::epsilon(), 2.0 / 3.0);
+  
+  // Perform singular value decomposition
+  arma::mat U, V;
+  arma::vec S;
+  arma::svd(U, S, V, A);
+  
+  // Set the threshold for small singular values
+  double threshold = tolerance * S(0); // S(0) is the largest singular value
+  arma::uvec non_zero_indices = arma::find(S > threshold);
+  
+  if (non_zero_indices.n_elem == 0) {
+    // All singular values are below the threshold
+    return arma::zeros(A.n_cols, A.n_rows);
+  } else {
+    // Filter out small singular values and compute the pseudoinverse
+    arma::vec S_inv = arma::zeros(S.n_elem);
+    S_inv(non_zero_indices) = 1 / S(non_zero_indices);
+    return V * arma::diagmat(S_inv) * U.t();
+  }
 }
 
 /*
