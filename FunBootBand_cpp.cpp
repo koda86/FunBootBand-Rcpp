@@ -300,5 +300,18 @@ void calculate_fourier_cov_and_std(
   fourier_std_all = arma::sqrt(temp); // Element-wise square root
 }
 
+// [[Rcpp::export]]
+void extract_diagonal_to_fourier_std(
+    arma::mat& fourier_std,       // Matrix to store extracted diagonal values
+    const arma::mat& fourier_std_all // Square matrix (fourier.std_all)
+) {
+  int n_time = fourier_std_all.n_rows;
+  
+  for (int i = 0; i < n_time; i++) {
+    // Extract diagonal element and store in fourier_std[i, 1]
+    fourier_std(i, 0) = fourier_std_all(i, i);
+  }
+}
+
 
 
