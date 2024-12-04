@@ -258,4 +258,25 @@ void calculate_mean_fourier_curve(
   fourier_real_mw.col(0) = fourier_s * fourier_mean.col(0); // Matrix multiplication
 }
 
+// [[Rcpp::export]]
+void calculate_fourier_std1(
+    arma::cube& fourier_std1,          // 3D array to store variance-covariance matrices
+    const arma::mat& fourier_koeffi,   // Matrix of Fourier coefficients
+    const arma::vec& fourier_mean      // Vector of mean Fourier coefficients
+) {
+  int n_curves = fourier_koeffi.n_cols;
+  
+  for (int i = 0; i < n_curves; i++) {
+    // Compute the difference (fourier.koeffi[, i] - fourier.mean[, 1])
+    arma::vec diff = fourier_koeffi.col(i) - fourier_mean;
+    
+    // Compute the variance-covariance matrix and assign to fourier.std1[, , i]
+    fourier_std1.slice(i) = diff * diff.t();
+  }
+}
+
+
+
+
+
 
