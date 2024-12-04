@@ -244,4 +244,18 @@ void calculate_fourier_coefficients_and_curves(
   }
 }
 
+// [[Rcpp::export]]
+void calculate_mean_fourier_curve(
+    arma::mat& fourier_mean,       // Matrix to store Fourier means
+    arma::mat& fourier_real_mw,    // Matrix to store mean Fourier curve
+    const arma::mat& fourier_koeffi, // Matrix of Fourier coefficients
+    const arma::mat& fourier_s     // Fourier basis matrix
+) {
+  // Compute the mean of Fourier coefficients across columns (equivalent to rowMeans)
+  fourier_mean.col(0) = arma::mean(fourier_koeffi, 1); // Mean along rows
+  
+  // Compute the mean Fourier curve
+  fourier_real_mw.col(0) = fourier_s * fourier_mean.col(0); // Matrix multiplication
+}
+
 
