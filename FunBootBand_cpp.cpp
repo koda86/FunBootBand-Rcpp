@@ -276,7 +276,29 @@ void calculate_fourier_std1(
 }
 
 
-
+// [[Rcpp::export]]
+void calculate_fourier_cov_and_std(
+    arma::mat& fourier_cov,          // Matrix to store the covariance matrix
+    arma::mat& fourier_std_all,      // Matrix to store the standard deviation results
+    const arma::cube& fourier_std1, // 3D array of variance-covariance matrices
+    const arma::mat& fourier_s       // Fourier basis matrix
+) {
+  int n_rows = fourier_std1.n_rows;
+  int n_cols = fourier_std1.n_cols;
+  int n_slices = fourier_std1.n_slices;
+  
+  // Calculate the mean covariance matrix (apply mean across slices)
+  fourier_cov.zeros(n_rows, n_cols); // Initialize to zero
+  for (int i = 0; i < n_slices; i++) {
+    fourier_cov += fourier_std1.slice(i);
+  }
+  fourier_cov /= n_slices; // Divide by the number of slices to compute the mean
+  
+  // Compute the standard deviation matrix
+  // fourier_std_all = sqrt(fourier_s %*% fourier_cov %*% t(fourier_s))
+  arma::mat temp = fourier_s * fourier_cov * fourier_s.t();
+  fourier_std_all = arma::sqrt(temp); // Element-wise square root
+}
 
 
 
