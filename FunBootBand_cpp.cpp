@@ -7,21 +7,65 @@
 #include <vector>
 using namespace Rcpp;
 
-/*
 // [[Rcpp::export]]
-void hello_world () {
-  std::cout << "Hello, world!";
+void validate_band_arguments(
+    const DataFrame& data,    // Input data
+    const std::string& type,  // Type: "confidence" or "prediction"
+    double alpha,             // Alpha: between 0 and 1
+    bool iid,                 // IID: true or false
+    int k_coef,               // k.coef: positive integer
+    int B                     // B: positive integer
+) {
+  // Check 'type'
+  if (type.empty() || (type != "confidence" && type != "prediction")) {
+    stop("'type' must be either 'confidence' or 'prediction'.");
+  }
+  
+  // Check 'alpha'
+  if (alpha <= 0.0 || alpha >= 1.0) {
+    stop("'alpha' must be a numeric value between 0 and 1.");
+  }
+  
+  // Check 'iid' (logical in R maps to bool in C++)
+  if (!LogicalVector::is_na(iid) && (iid != true && iid != false)) {
+    stop("'iid' must be a logical value (TRUE or FALSE).");
+  }
+  
+  // Check 'k.coef'
+  if (k_coef <= 0) {
+    stop("'k.coef' must be a positive integer.");
+  }
+  
+  // Check 'B'
+  if (B <= 0) {
+    stop("'B' must be a positive integer.");
+  }
+  
+  // Check for NA values in the DataFrame
+  LogicalVector na_check = is_na(data);
+  if (is_true(any(na_check))) {
+    stop("Function stopped due to NA's in the input data.");
+  }
+  
+  // Check if the input data is a data frame (already enforced by Rcpp::DataFrame)
+  // Additional validation could be added if necessary.
+  
+  // Check if all elements of the data frame are numeric
+  for (int i = 0; i < data.size(); i++) {
+    if (!Rf_isNumeric(data[i])) {
+      stop("Non-numeric data found in input.");
+    }
+  }
 }
-*/
  
- // [[Rcpp::export]]
- List getDimensions(DataFrame data) {
-   int n_curves = data.ncol();
-   int n_time = data.nrow();
-   
-   return List::create(Named("n_time") = n_time,
-                       Named("n_curves") = n_curves);
- }
+// [[Rcpp::export]]
+List getDimensions(DataFrame data) {
+ int n_curves = data.ncol();
+ int n_time = data.nrow();
+ 
+ return List::create(Named("n_time") = n_time,
+                     Named("n_curves") = n_curves);
+}
  
 // --------------------------------------------------------------------------
 // This implements a more robust approach that allows the detection of the
