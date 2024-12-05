@@ -66,6 +66,9 @@ List getDimensions(DataFrame data) {
  return List::create(Named("n_time") = n_time,
                      Named("n_curves") = n_curves);
 }
+
+// [[Rcpp::export]]
+
  
 // --------------------------------------------------------------------------
 // This implements a more robust approach that allows the detection of the

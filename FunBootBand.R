@@ -84,19 +84,49 @@ band <- function(data, type, alpha, iid = TRUE, k.coef = 50, B = 400) {
   n.time <- dim(data)[1]
   time <- seq(0, (n.time - 1))
 
-  if (iid != TRUE) {
-    # Check colnames to make sure the nested structure is correctly identified
-    if (colnames(data)[1] != colnames(data)[2]) {
-      # This is necessary to make sure curves are not detected as iid
-      new_colnames <- substr(colnames(data), 1, 1)
-      colnames(data) <- new_colnames
+  # The following checks are implemented to make sure no errors due to column
+  # names occur. Errors occur when a nested structure is indicated (iid=FALSE)
+  # but is not properly specified. A proper specification is one, in which
+  # dependent/repeated curves within one cluster/instance (e.g., subject) all
+  # have the exact same name (e.g., "A", "A"). If violated (e.g., "A.1", "A.2"),
+  # the program assumes independent curves.
+  if (iid == FALSE) {
+    
+    # # Old version (fall back in case of erroreous behavior)
+    # if (colnames(data)[1] != colnames(data)[2]) { # True if, e.g., colnames(data)[1]=="A" and colnames(data)[2]=="A.1"
+    #   new.colnames <- substr(colnames(data), 1, 1)
+    #   colnames(data) <- new.colnames
+    # }
+    # # Halt the execution if curves within the same cluster do not have the exact
+    # # same label/name (even after running the if-condition statement)
+    # if (colnames(data)[1] != colnames(data)[2]) {
+    #   stop("Header does not indicate a nested structure even though 'iid' is set to 'FALSE'.")
+    # }
+    
+    # Detect if a nested structure is given
+    detect_nested_structure <- function(data) {
+      col_names <- colnames(data)
+      
+      # Normalize column names: remove suffixes, whitespace, and normalize case
+      normalized_names <- tolower(trimws(sub("(_|-|\\.).*", "", col_names)))
+      
+      # Check if there are multiple columns in each group
+      all_clusters_nested <- all(table(normalized_names) > 1)
+      
+      # Return the boolean result
+      return(all_clusters_nested)
     }
-
-    if (colnames(data)[1] != colnames(data)[2]) {
-      stop("Header does not indicate a nested structure even though 'iid' is set to 'FALSE'.")
-      # \n Make sure curves within the same cluster all have the exact same column label.")
+    
+    # Check if nested structure is specified
+    if (detect_nested_structure(data) == FALSE) {
+      stop("Your header does not indicate a nested structure even though 'iid' is set to 'FALSE'. Please make sure curves from the same cluster/instance/subject can be recognized as such and be distinguished from curves of a different cluster.")
     }
-
+    
+    # Additional check: Look for empty or NA column names
+    if (any(is.na(colnames(data)) | colnames(data) == "")) {
+      stop("Column names cannot contain missing or empty values.")
+    }
+    
     # --------------------------------------------------------------------------
     # This implements a more robust approach that allows the detection of the
     # number and size (aka number of curves per cluster) of cluster in the case
